@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>FeastFrost — Нови-Сад</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="config.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
@@ -190,6 +191,7 @@
   .btn-main{width:100%;padding:16px;border-radius:16px;background:var(--cheese);color:var(--cheese-ink);
     font-weight:800;font-size:16px;box-shadow:0 10px 26px -10px rgba(255,170,30,.6)}
   .btn-main:active{transform:scale(.98)}
+  .btn-main:disabled{opacity:.7}
   .btn-ghost{width:100%;padding:12px;margin-top:4px;color:var(--muted);font-weight:700;font-size:14px}
 
   /* ---------- галерея ---------- */
@@ -262,21 +264,18 @@
     <div class="field" id="pickupField" style="display:none">
       <label>Где забрать</label>
       <div class="pickup">
-        <iframe src="https://www.google.com/maps?q=45.2469744,19.839275&amp;z=17&amp;output=embed" loading="lazy" title="Место выдачи"></iframe>
+        <iframe id="pickupMap" loading="lazy" title="Место выдачи"></iframe>
         <div class="pickup-info">
-          <b>📍 Рядом с кофейней Freeshka</b>
-          <span>Bulevar oslobođenja 94, Нови-Сад</span>
-          <small>С кофейней мы никак не связаны — просто удобная точка встречи.</small>
+          <b id="pickupTitle"></b>
+          <span id="pickupAddr"></span>
+          <small id="pickupNote"></small>
           <button type="button" id="mapBtn">Открыть в картах ↗</button>
         </div>
       </div>
     </div>
     <div class="field" id="zoneField">
       <label>Зона доставки</label>
-      <div class="seg" id="segZone">
-        <button data-val="Нови-Сад" class="on">Нови-Сад<small>0 RSD</small></button>
-        <button data-val="Пригород">Пригород<small>350 RSD</small></button>
-      </div>
+      <div class="seg" id="segZone"></div>
     </div>
     <div class="row2">
       <div class="field" id="f-date">
@@ -732,7 +731,8 @@ const Floaters = (() => {
 /* ============================================================
    ВИТРИНА
    ============================================================ */
-const products = [
+// Запасной каталог: показывается, пока грузится таблица, или если она недоступна
+const FALLBACK_PRODUCTS = [
   { id: 1, category: "Котлеты", name: "Куриные с овощами", price: 650, desc: "Сочные куриные котлеты со свежими овощами.", weight: "6 шт · 480 г", images: ["images/p1_1.webp", "images/p1_2.webp", "images/p1_3.webp"] },
   { id: 2, category: "Котлеты", name: "Куриные классические", price: 650, desc: "Нежные куриные котлеты по классическому рецепту.", weight: "6 шт · 480 г", images: ["images/p2_1.webp", "images/p2_2.webp", "images/p2_3.webp"] },
   { id: 3, category: "Котлеты", name: "Гнездо с ананасом", price: 770, desc: "Сочная котлета под ананасом и сыром.", weight: "4 шт · 500 г", images: ["images/p3_1.webp", "images/p3_2.webp", "images/p3_3.webp"] },
@@ -749,24 +749,35 @@ const products = [
   { id: 14, category: "Запеканка", name: "Творог Классич", price: 600, desc: "Творожная запеканка.", weight: "500 г", images: [] },
   { id: 15, category: "Запеканка", name: "Творог + Вишня", price: 650, desc: "Запеканка с вишней.", weight: "500 г", images: ["images/p15_1.webp", "images/p15_2.webp", "images/p15_3.webp"] }
 ];
-const CAT_EMOJI = { "Котлеты": "🥩", "Фрикадельки": "🧆", "Блины": "🥞", "Запеканка": "🍰" };
-const ZONE_FEE = { "Нови-Сад": 0, "Пригород": 350 };
+const CFG = window.FF_CONFIG || {};
+const API_URL = new URLSearchParams(location.search).get("api") || CFG.API_URL || "";
+// эмодзи категорий: если категории нет в списке — берётся 🍽 (или эмодзи в начале названия категории в таблице)
+const CAT_EMOJI = Object.assign({ "Котлеты": "🥩", "Фрикадельки": "🧆", "Блины": "🥞", "Запеканка": "🍰", "Пельмени": "🥟", "Вареники": "🥟", "Супы": "🍲", "Десерты": "🍰", "Наборы": "🎁" }, CFG.CAT_EMOJI || {});
+const catEmoji = c => CAT_EMOJI[c] || ((c.match(/^\p{Extended_Pictographic}/u) || [])[0]) || "🍽";
+const catLabel = c => c.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "");
+let ZONES = [{ name: "Нови-Сад", fee: 0 }, { name: "Пригород", fee: 350 }];
+let PICKUP = { title: "Рядом с кофейней Freeshka", address: "Bulevar oslobođenja 94, Novi Sad",
+  note: "С кофейней мы никак не связаны — просто удобная точка встречи.",
+  map: "https://www.google.com/maps/search/?api=1&query=45.2469744,19.839275", lat: 45.2469744, lng: 19.839275 };
+let products = FALLBACK_PRODUCTS;
+const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const imgUrl = f => /^(https?:)?\/\//.test(f) || f.startsWith("images/") || f.startsWith("data:") ? f : "images/" + f;
 
 const $ = id => document.getElementById(id);
 const byId = id => products.find(p => p.id === +id);
 const fmt = n => n.toLocaleString("ru-RU");
 const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; };
 
-let currentCategory = "Котлеты";
+let currentCategory = FALLBACK_PRODUCTS[0].category;
 const cart = {};
-const state = { type: "Доставка", zone: "Нови-Сад" };
+const state = { type: "Доставка", zone: ZONES[0].name };
 
 /* ---- категории и карточки ---- */
 function renderCats(){
   const cats = [...new Set(products.map(p => p.category))];
   $("cats").innerHTML = cats.map(c => {
     const n = products.filter(p => p.category === c).reduce((s, p) => s + (cart[p.id] || 0), 0);
-    return `<button class="cat ${c === currentCategory ? "active" : ""}" data-cat="${c}"><span class="em">${CAT_EMOJI[c] || "🍽"}</span>${c}${n ? `<span class="badge">${n}</span>` : ""}</button>`;
+    return `<button class="cat ${c === currentCategory ? "active" : ""}" data-cat="${esc(c)}"><span class="em">${catEmoji(c)}</span>${esc(catLabel(c))}${n ? `<span class="badge">${n}</span>` : ""}</button>`;
   }).join("");
 }
 function ctrlHTML(id){
@@ -776,18 +787,18 @@ function ctrlHTML(id){
 }
 function renderGrid(){
   const list = products.filter(p => p.category === currentCategory);
-  $("secTitle").textContent = currentCategory;
+  $("secTitle").textContent = catLabel(currentCategory);
   $("secCount").textContent = `${list.length} ${plural(list.length, "позиция", "позиции", "позиций")}`;
   $("grid").innerHTML = list.map((p, i) => `
     <article class="card" style="--i:${i}">
-      <button class="card-img" data-gallery="${p.id}" data-em="${CAT_EMOJI[p.category] || "🍽"}" aria-label="Фото: ${p.name}">
-        ${p.images.length ? `<img src="${p.images[0]}" alt="" loading="lazy" onerror="this.remove()">
+      <button class="card-img" data-gallery="${p.id}" data-em="${catEmoji(p.category)}" aria-label="Фото: ${esc(p.name)}">
+        ${p.images.length ? `<img src="${esc(imgUrl(p.images[0]))}" alt="" loading="lazy" onerror="this.remove()">
         <span class="photo-badge">📷 ${p.images.length}</span>` : `<span class="photo-badge">фото скоро</span>`}
       </button>
       <div class="card-body">
-        <h3>${p.name}</h3>
-        ${p.weight ? `<div class="weight">${p.weight}</div>` : ""}
-        <p>${p.desc}</p>
+        <h3>${esc(p.name)}</h3>
+        ${p.weight ? `<div class="weight">${esc(p.weight)}</div>` : ""}
+        <p>${esc(p.desc)}</p>
         <div class="card-foot">
           <div class="price">${fmt(p.price)}<small>RSD</small></div>
           <div class="ctrl" data-ctrl="${p.id}">${ctrlHTML(p.id)}</div>
@@ -822,7 +833,7 @@ function changeQty(id, d, fromEl){
 /* ---- корзина ---- */
 const totalCount = () => Object.values(cart).reduce((a, b) => a + b, 0);
 const goodsSum = () => Object.entries(cart).reduce((s, [id, q]) => s + byId(id).price * q, 0);
-const deliveryFee = () => state.type === "Доставка" ? ZONE_FEE[state.zone] : 0;
+const deliveryFee = () => state.type === "Доставка" ? ((ZONES.find(z => z.name === state.zone) || ZONES[0]).fee || 0) : 0;
 
 function updateCartBar(bump){
   const bar = $("cartBar"), n = totalCount();
@@ -863,7 +874,8 @@ let gImgs = [], gIdx = 0;
 function openGallery(id){
   const p = byId(id); if (!p || !p.images.length) return;
   gImgs = p.images; gIdx = 0;
-  $("gTitle").innerHTML = `${p.name}<small>${fmt(p.price)} RSD</small>`;
+  gImgs = p.images.map(imgUrl);
+  $("gTitle").innerHTML = `${esc(p.name)}<small>${fmt(p.price)} RSD</small>`;
   showSlide(0); openLayer("gallery");
 }
 function showSlide(dir){
@@ -885,7 +897,7 @@ $("gPrev").onclick = () => go(-1); $("gNext").onclick = () => go(1);
 /* ---- оформление ---- */
 function renderCheckout(){
   $("lines").innerHTML = Object.entries(cart).map(([id, q]) => { const p = byId(id);
-    return `<div class="line"><img src="${p.images[0] || ""}" alt="" onerror="this.style.visibility='hidden'"><div class="nm">${p.name}<small>${p.category} · ${fmt(p.price)} RSD</small></div>
+    return `<div class="line"><img src="${p.images[0] ? esc(imgUrl(p.images[0])) : ""}" alt="" onerror="this.style.visibility='hidden'"><div class="nm">${esc(p.name)}<small>${esc(catLabel(p.category))} · ${fmt(p.price)} RSD</small></div>
       <div class="ctrl" data-ctrl="${id}">${ctrlHTML(id)}</div></div>`; }).join("");
   const g = goodsSum(), f = deliveryFee();
   $("totals").innerHTML = `<div><span>Товары</span><span>${fmt(g)} RSD</span></div>
@@ -901,11 +913,20 @@ function bindSeg(id, key){
     state[key] = b.dataset.val; [...$(id).children].forEach(x => x.classList.toggle("on", x === b)); haptic.soft(); renderCheckout(); });
 }
 bindSeg("segType", "type"); bindSeg("segZone", "zone");
-const PICKUP = { address: "Bulevar oslobođenja 94, Novi Sad (возле кофейни Freeshka)", url: "https://www.google.com/maps/search/?api=1&query=45.2469744,19.839275" };
-$("mapBtn").addEventListener("click", () => { haptic.tap(); if (inTelegram) tg.openLink(PICKUP.url); else window.open(PICKUP.url, "_blank"); });
+$("mapBtn").addEventListener("click", () => { haptic.tap(); if (inTelegram) tg.openLink(PICKUP.map); else window.open(PICKUP.map, "_blank"); });
+function renderZonesAndPickup(){
+  if (!ZONES.find(z => z.name === state.zone)) state.zone = ZONES[0].name;
+  $("segZone").innerHTML = ZONES.map(z => `<button data-val="${esc(z.name)}" class="${z.name === state.zone ? "on" : ""}">${esc(z.name)}<small>${z.fee ? fmt(z.fee) + " RSD" : "бесплатно"}</small></button>`).join("");
+  $("pickupTitle").textContent = "📍 " + PICKUP.title;
+  $("pickupAddr").textContent = PICKUP.address;
+  $("pickupNote").textContent = PICKUP.note || "";
+  const q = PICKUP.lat ? `${PICKUP.lat},${PICKUP.lng}` : encodeURIComponent(PICKUP.address);
+  const src = `https://www.google.com/maps?q=${q}&z=17&output=embed`;
+  if ($("pickupMap").getAttribute("src") !== src) $("pickupMap").setAttribute("src", src);
+}
 document.querySelectorAll("[data-day]").forEach(b => b.addEventListener("click", () => {
   const d = new Date(); d.setDate(d.getDate() + +b.dataset.day);
-  $("deliv-date").value = `${b.textContent}, ${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}`;
+  $("deliv-date").value = `${b.textContent}, ${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
   haptic.soft(); $("f-date").classList.remove("bad");
 }));
 document.querySelectorAll(".field input").forEach(i => i.addEventListener("input", () => i.closest(".field").classList.remove("bad")));
@@ -921,38 +942,99 @@ $("client-nick").addEventListener("blur", e => { e.target.value = normNick(e.tar
 
 function toast(msg){ const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
 
-$("confirmBtn").addEventListener("click", () => {
+const ERR_TEXT = {
+  unauthorized: "Откройте витрину из нашего бота в Telegram, чтобы оформить заказ.",
+  unknown_product: "Ассортимент обновился — обновите страницу и проверьте корзину.",
+  no_contacts: "Укажите имя и телефон.",
+  empty_cart: "Корзина пустая.",
+  too_many: "Слишком много заявок подряд. Попробуйте через час или напишите нам.",
+};
+let sending = false;
+function clearCart(){
+  Object.keys(cart).forEach(k => delete cart[k]);
+  document.querySelectorAll("[data-ctrl]").forEach(el => el.innerHTML = ctrlHTML(el.dataset.ctrl));
+  renderCats(); updateCartBar(false);
+}
+
+$("confirmBtn").addEventListener("click", async () => {
+  if (sending) return;
   const need = ["f-name", "f-phone"]; if (state.type === "Доставка") need.push("f-address");
   const bad = need.filter(f => !$(f).querySelector("input").value.trim());
   need.forEach(f => $(f).classList.toggle("bad", bad.includes(f)));
   if (bad.length){ haptic.err(); $(bad[0]).querySelector("input").focus(); return; }
 
   const orderData = {
-    cart: { ...cart },
     delivery_type: state.type,
-    delivery_zone: state.zone,
-    date: $("deliv-date").value.trim(),
+    delivery_zone: state.type === "Доставка" ? state.zone : "",
+    date: $("deliv-date").value.trim() || "Сегодня",
     time: $("deliv-time").value.trim(),
     name: $("client-name").value.trim(),
     tg_username: normNick($("client-nick").value),
     tg_user_id: tgUser ? tgUser.id : null,
     phone: $("client-phone").value.trim(),
-    address: state.type === "Доставка" ? $("client-address").value.trim() : PICKUP.address,
-    items: Object.entries(cart).map(([id, q]) => { const p = byId(id); return { id: +id, name: p.name, category: p.category, qty: q, price: p.price, sum: p.price*q }; }),
+    address: state.type === "Доставка" ? $("client-address").value.trim() : `${PICKUP.title}, ${PICKUP.address}`,
+    items: Object.entries(cart).map(([id, q]) => { const p = byId(id); return { id: +id, name: p.name, category: p.category, qty: q, price: p.price }; }),
     goods_total: goodsSum(), delivery_fee: deliveryFee(), total: goodsSum() + deliveryFee()
   };
-  haptic.ok();
-  if (inTelegram){ tg.sendData(JSON.stringify(orderData)); tg.close(); }
-  else {
-    console.log("ORDER", orderData); closeTop(); toast("🔥 Предзаказ отправлен!");
-    Object.keys(cart).forEach(k => delete cart[k]);
-    document.querySelectorAll("[data-ctrl]").forEach(el => el.innerHTML = ctrlHTML(el.dataset.ctrl));
-    renderCats(); updateCartBar(false);
+
+  // Без API — старый путь (tg.sendData, работает только с кнопки клавиатуры бота)
+  if (!API_URL){
+    haptic.ok();
+    if (inTelegram){ tg.sendData(JSON.stringify(orderData)); tg.close(); }
+    else { console.log("ORDER", orderData); closeTop(); toast("🔥 Предзаказ отправлен! (демо)"); clearCart(); }
+    return;
+  }
+
+  const btn = $("confirmBtn"), label = btn.textContent;
+  sending = true; btn.disabled = true; btn.textContent = "Отправляем…";
+  try {
+    // text/plain — чтобы браузер не делал preflight-запрос (Apps Script его не поддерживает)
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ initData: tg ? tg.initData : "", order: orderData }) });
+    const r = await res.json();
+    if (!r.ok) throw Object.assign(new Error(r.error || "error"), { code: r.error });
+    haptic.ok(); closeTop(); clearCart();
+    toast(`🔥 Заказ ${r.order_id} принят!`);
+    if (inTelegram) setTimeout(() => { try { tg.close(); } catch(e){} }, 2200);
+  } catch (e){
+    haptic.err();
+    toast("😕 " + (ERR_TEXT[e.code] || "Не получилось отправить. Попробуйте ещё раз."));
+    console.warn("order error", e);
+  } finally {
+    sending = false; btn.disabled = false; btn.textContent = label;
   }
 });
 
+/* ---- каталог из таблицы ---- */
+function applyCatalog(data){
+  if (!data || !Array.isArray(data.products) || !data.products.length) return false;
+  const byName = {}; Object.entries(cart).forEach(([id, q]) => { const p = byId(id); if (p) byName[p.name] = q; });
+  products = data.products.map(p => ({ ...p, images: Array.isArray(p.images) ? p.images : [], desc: p.desc || "", weight: p.weight || "" }));
+  if (Array.isArray(data.zones) && data.zones.length) ZONES = data.zones;
+  if (data.pickup) PICKUP = Object.assign({}, PICKUP, data.pickup);
+  // корзина переживает обновление каталога (сопоставляем по названию)
+  Object.keys(cart).forEach(k => delete cart[k]);
+  products.forEach(p => { if (byName[p.name]) cart[p.id] = byName[p.name]; });
+  const cats = [...new Set(products.map(p => p.category))];
+  if (!cats.includes(currentCategory)) currentCategory = cats[0];
+  renderCats(); renderGrid(); updateCartBar(false); renderZonesAndPickup();
+  if ($("checkout").classList.contains("open")) renderCheckout();
+  return true;
+}
+const CACHE_KEY = "ff_catalog_v1";
+async function loadCatalog(){
+  if (!API_URL) return;
+  try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); if (c) applyCatalog(c); } catch(e){}
+  try {
+    const res = await fetch(API_URL + (API_URL.includes("?") ? "&" : "?") + "t=" + Date.now());
+    const data = await res.json();
+    if (applyCatalog(data)) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch(e){} }
+  } catch (e){ console.warn("catalog: используем запасной список", e); }
+}
+
 /* ---- старт ---- */
-renderCats(); renderGrid(); updateCartBar(false);
+renderCats(); renderGrid(); updateCartBar(false); renderZonesAndPickup();
+loadCatalog();
 Logo.start();
 Floaters.start();
 </script>
