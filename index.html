@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>FeastFrost — Нови-Сад</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="config.js"></script>
+<script>/* config.js грузим всегда свежим, без кэша браузера */document.write('<script src="config.js?t='+Date.now()+'"><\/script>');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
@@ -903,7 +903,7 @@ function renderCheckout(){
   $("totals").innerHTML = `<div><span>Товары</span><span>${fmt(g)} RSD</span></div>
     ${state.type === "Доставка" ? `<div><span>Доставка (${state.zone})</span><span>${f ? fmt(f) + " RSD" : "бесплатно"}</span></div>` : ""}
     <div class="grand"><span>Итого</span><b>${fmt(g + f)} RSD</b></div>`;
-  $("confirmBtn").textContent = `Подтвердить · ${fmt(g + f)} RSD`;
+  $("confirmBtn").textContent = browserBlocked() ? "Оформить можно в Telegram ↗" : `Подтвердить · ${fmt(g + f)} RSD`;
   $("zoneField").style.display = $("f-address").style.display = state.type === "Доставка" ? "" : "none";
   $("pickupField").style.display = state.type === "Самовывоз" ? "" : "none";
 }
@@ -956,8 +956,16 @@ function clearCart(){
   renderCats(); updateCartBar(false);
 }
 
+// В обычном браузере (не в Telegram) заказ не принимаем — только показываем, куда идти
+function browserBlocked(){ return !inTelegram && API_URL && CFG.BROWSER_ORDERS === false; }
+
 $("confirmBtn").addEventListener("click", async () => {
   if (sending) return;
+  if (browserBlocked()){
+    if (CFG.BOT_URL) window.open(CFG.BOT_URL, "_blank");
+    else toast("Откройте витрину в нашем Telegram-боте");
+    return;
+  }
   const need = ["f-name", "f-phone"]; if (state.type === "Доставка") need.push("f-address");
   const bad = need.filter(f => !$(f).querySelector("input").value.trim());
   need.forEach(f => $(f).classList.toggle("bad", bad.includes(f)));
