@@ -759,7 +759,22 @@ let ZONES = [{ name: "Нови-Сад", fee: 0 }, { name: "Пригород", fe
 let PICKUP = { title: "Рядом с кофейней Freeshka", address: "Bulevar oslobođenja 94, Novi Sad",
   note: "С кофейней мы никак не связаны — просто удобная точка встречи.",
   map: "https://www.google.com/maps/search/?api=1&query=45.2469744,19.839275", lat: 45.2469744, lng: 19.839275 };
-let products = FALLBACK_PRODUCTS;
+// Карточка «Как приготовить» — последний слайд карусели, подбирается по типу товара
+const COOK_RULES = CFG.COOK_RULES || [
+  [/гн[её]зд/i, "cook_gnezda.webp"],
+  [/котлет|мишк/i, "cook_kotlety.webp"],
+  [/блин/i, "cook_bliny.webp"],
+  [/фрикадел/i, "cook_frikadelki.webp"],
+  [/запеканк/i, "cook_zapekanka.webp"],
+];
+function withCook(p){
+  const text = `${p.name} ${p.category}`;
+  const rule = COOK_RULES.find(([re]) => re.test(text));
+  const imgs = (p.images || []).slice();
+  if (rule && !imgs.some(f => f.includes(rule[1]))) imgs.push(rule[1]);
+  return { ...p, images: imgs };
+}
+let products = FALLBACK_PRODUCTS.map(withCook);
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const imgUrl = f => /^(https?:)?\/\//.test(f) || f.startsWith("images/") || f.startsWith("data:") ? f : "images/" + f;
 
@@ -1017,7 +1032,7 @@ $("confirmBtn").addEventListener("click", async () => {
 function applyCatalog(data){
   if (!data || !Array.isArray(data.products) || !data.products.length) return false;
   const byName = {}; Object.entries(cart).forEach(([id, q]) => { const p = byId(id); if (p) byName[p.name] = q; });
-  products = data.products.map(p => ({ ...p, images: Array.isArray(p.images) ? p.images : [], desc: p.desc || "", weight: p.weight || "" }));
+  products = data.products.map(p => withCook({ ...p, images: Array.isArray(p.images) ? p.images : [], desc: p.desc || "", weight: p.weight || "" }));
   if (Array.isArray(data.zones) && data.zones.length) ZONES = data.zones;
   if (data.pickup) PICKUP = Object.assign({}, PICKUP, data.pickup);
   // корзина переживает обновление каталога (сопоставляем по названию)
