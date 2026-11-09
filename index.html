@@ -183,6 +183,10 @@
   .chips{display:flex;gap:6px;margin-top:7px}
   .chips button{padding:6px 10px;border-radius:9px;background:var(--surface-2);font-size:12px;font-weight:700;color:#c9ccd2}
   .chips button:active{background:#2a2f38}
+  .chips button.on{background:var(--cheese);color:var(--cheese-ink)}
+  .chips button:disabled{opacity:.35;text-decoration:line-through}
+
+  .chips.slots button{flex:1;padding:9px 0;font-size:13px}
 
   .notice{margin:16px 0;padding:14px 15px;border-radius:16px;font-size:13.5px;line-height:1.5;color:#d6d8dc;
     background:linear-gradient(135deg,rgba(169,231,255,.08),rgba(255,200,58,.08));border:1px solid var(--line-2)}
@@ -204,9 +208,21 @@
   .g-close{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.08);font-size:22px;display:grid;place-items:center}
   .g-stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:pan-y}
   .g-stage img{max-width:92%;max-height:86%;border-radius:16px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.7);transition:transform .25s,opacity .25s}
-  .g-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;
+  .g-nav{position:absolute;bottom:6px;z-index:2;width:44px;height:44px;border-radius:50%;
     background:rgba(255,255,255,.09);font-size:20px;display:grid;place-items:center}
   .g-nav.l{left:10px}.g-nav.r{right:10px}
+  .g-cap{text-align:center;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cheese);min-height:18px}
+  .g-info{width:min(92%,460px);max-height:86%;overflow:auto;padding:22px 20px;border-radius:20px;
+    background:var(--surface-solid);border:1px solid var(--line-2);box-shadow:0 20px 60px rgba(0,0,0,.6);transition:transform .25s,opacity .25s}
+  .g-info h4{font-family:var(--display);font-weight:800;font-size:20px;line-height:1.15;margin-bottom:8px}
+  .g-info .weight{margin-bottom:12px}
+  .g-info p{font-size:14.5px;line-height:1.5;color:#d6d8dc}
+  .g-info .lbl{font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+  .kbju{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .kbju div{padding:10px 4px;border-radius:12px;background:var(--surface-2);text-align:center}
+  .kbju b{display:block;font-family:var(--display);font-size:17px}
+  .kbju span{font-size:11px;color:var(--muted);font-weight:700}
+  .g-info .soon{font-size:13px;color:var(--muted)}
   .dots{display:flex;justify-content:center;gap:7px;padding:18px 0 calc(22px + var(--safe-b))}
   .dots i{width:7px;height:7px;border-radius:4px;background:rgba(255,255,255,.22);transition:width .25s,background .25s}
   .dots i.on{width:22px;background:var(--cheese)}
@@ -277,15 +293,16 @@
       <label>Зона доставки</label>
       <div class="seg" id="segZone"></div>
     </div>
-    <div class="row2">
-      <div class="field" id="f-date">
-        <label>Дата получения</label>
-        <input id="deliv-date" placeholder="Завтра или 15.11">
-        <div class="chips"><button data-day="0">Сегодня</button><button data-day="1">Завтра</button></div>
-      </div>
-      <div class="field">
-        <label>Время</label>
-        <input id="deliv-time" placeholder="с 14:00 до 16:00">
+    <div class="field" id="f-date">
+      <label>Дата получения</label>
+      <input id="deliv-date" placeholder="Выберите или впишите дату">
+      <div class="chips"><button data-day="0">Сегодня</button><button data-day="1">Завтра</button><button data-day="2">Послезавтра</button></div>
+    </div>
+    <div class="field">
+      <label>Время</label>
+      <input id="deliv-time" placeholder="Выберите или впишите время">
+      <div class="chips slots" id="slots">
+        <button data-slot="16–17">16–17</button><button data-slot="17–18">17–18</button><button data-slot="18–19">18–19</button><button data-slot="19–20">19–20</button>
       </div>
     </div>
     <div class="row2">
@@ -327,8 +344,10 @@
   <div class="g-stage" id="gStage">
     <button class="g-nav l" id="gPrev" aria-label="Назад">&#10094;</button>
     <img id="gImg" alt="Фото блюда">
+    <div class="g-info" id="gInfo" hidden></div>
     <button class="g-nav r" id="gNext" aria-label="Вперёд">&#10095;</button>
   </div>
+  <div class="g-cap" id="gCap"></div>
   <div class="dots" id="gDots"></div>
 </div>
 
@@ -741,13 +760,13 @@ const FALLBACK_PRODUCTS = [
   { id: 6, category: "Котлеты", name: "Мишки (детские)", price: 550, desc: "Детские мини-котлетки.", weight: "", images: ["images/p6_1.webp", "images/p6_2.webp", "images/p6_3.webp"] },
   { id: 7, category: "Фрикадельки", name: "Куриные классические", price: 700, desc: "Куриные фрикадельки.", weight: "500 г", images: ["images/p7_1.webp", "images/p7_2.webp", "images/p7_3.webp"] },
   { id: 8, category: "Фрикадельки", name: "Куриные с овощами", price: 800, desc: "Фрикадельки с овощами.", weight: "500 г", images: ["images/p8_1.webp", "images/p8_2.webp", "images/p8_3.webp"] },
-  { id: 9, category: "Блины", name: "Сыр + Ветчина", price: 1000, desc: "Блинчики с ветчиной и сыром.", weight: "8 шт · 720 г", images: ["images/p9_1.webp", "images/p9_2.webp", "images/p9_3.webp"] },
-  { id: 10, category: "Блины", name: "Жульен", price: 1000, desc: "Блинчики с курицей и грибами.", weight: "8 шт · 720 г", images: ["images/p10_1.webp", "images/p10_2.webp", "images/p10_3.webp"] },
-  { id: 11, category: "Блины", name: "Яблоко + Корица", price: 850, desc: "Блины с яблоком и корицей.", weight: "8 шт · 720 г", images: ["images/p11_1.webp", "images/p11_2.webp", "images/p11_3.webp"] },
-  { id: 12, category: "Блины", name: "Творог", price: 850, desc: "Блинчики с творогом.", weight: "8 шт · 720 г", images: ["images/p12_1.webp", "images/p12_2.webp", "images/p12_3.webp"] },
+  { id: 9, category: "Блины", name: "Сыр + Ветчина", price: 1000, desc: "Блинчики с ветчиной и сыром.", weight: "8 шт · 720 г", ready: ["images/p9_1.webp", "images/p9_2.webp"], images: ["images/p9_3.webp"] },
+  { id: 10, category: "Блины", name: "Жульен", price: 1000, desc: "Блинчики с курицей и грибами.", weight: "8 шт · 720 г", ready: ["images/p10_1.webp", "images/p10_2.webp"], images: ["images/p10_3.webp"] },
+  { id: 11, category: "Блины", name: "Яблоко + Корица", price: 850, desc: "Блины с яблоком и корицей.", weight: "8 шт · 720 г", ready: ["images/p11_1.webp", "images/p11_2.webp"], images: ["images/p11_3.webp"] },
+  { id: 12, category: "Блины", name: "Творог", price: 850, desc: "Блинчики с творогом.", weight: "8 шт · 720 г", ready: ["images/p12_1.webp", "images/p12_2.webp"], images: ["images/p12_3.webp"] },
   { id: 13, category: "Блины", name: "БЕЗ начинки (шт)", price: 35, desc: "Тонкие блинчики (1 шт).", weight: "1 шт", images: ["images/p13_1.webp", "images/p13_2.webp", "images/p13_3.webp"] },
   { id: 14, category: "Запеканка", name: "Творог Классич", price: 600, desc: "Творожная запеканка.", weight: "500 г", images: [] },
-  { id: 15, category: "Запеканка", name: "Творог + Вишня", price: 650, desc: "Запеканка с вишней.", weight: "500 г", images: ["images/p15_1.webp", "images/p15_2.webp", "images/p15_3.webp"] }
+  { id: 15, category: "Запеканка", name: "Творог + Вишня", price: 650, desc: "Запеканка с вишней.", weight: "500 г", ready: ["images/p15_1.webp", "images/p15_2.webp", "images/p15_3.webp"], images: [] }
 ];
 const CFG = window.FF_CONFIG || {};
 const API_URL = new URLSearchParams(location.search).get("api") || CFG.API_URL || "";
@@ -770,10 +789,19 @@ const COOK_RULES = CFG.COOK_RULES || [
 function withCook(p){
   const text = `${p.name} ${p.category}`;
   const rule = COOK_RULES.find(([re]) => re.test(text));
-  const imgs = (p.images || []).slice();
-  if (rule && !imgs.some(f => f.includes(rule[1]))) imgs.push(rule[1]);
-  return { ...p, images: imgs };
+  const ready = (p.ready || []).filter(Boolean), frozen = (p.images || []).filter(f => !/^cook_/.test(f));
+  return { ...p, ready, frozen, cook: rule ? rule[1] : "", kbju: p.kbju || null, composition: p.composition || "" };
 }
+// Слайды карусели: 1) готовое блюдо 2) как выглядит замороженным 3) описание, состав, КБЖУ 4) как готовить
+function slidesOf(p){
+  return [
+    ...p.ready.map(f => ({ type: "img", src: imgUrl(f), cap: "Готовое блюдо" })),
+    ...p.frozen.map(f => ({ type: "img", src: imgUrl(f), cap: "Так выглядит в заморозке" })),
+    { type: "info" },
+    ...(p.cook ? [{ type: "img", src: imgUrl(p.cook), cap: "Как приготовить" }] : []),
+  ];
+}
+const coverOf = p => p.ready[0] || p.frozen[0] || "";
 let products = FALLBACK_PRODUCTS.map(withCook);
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const imgUrl = f => /^(https?:)?\/\//.test(f) || f.startsWith("images/") || f.startsWith("data:") ? f : "images/" + f;
@@ -807,8 +835,8 @@ function renderGrid(){
   $("grid").innerHTML = list.map((p, i) => `
     <article class="card" style="--i:${i}">
       <button class="card-img" data-gallery="${p.id}" data-em="${catEmoji(p.category)}" aria-label="Фото: ${esc(p.name)}">
-        ${p.images.length ? `<img src="${esc(imgUrl(p.images[0]))}" alt="" loading="lazy" onerror="this.remove()">
-        <span class="photo-badge">📷 ${p.images.length}</span>` : `<span class="photo-badge">фото скоро</span>`}
+        ${coverOf(p) ? `<img src="${esc(imgUrl(coverOf(p)))}" alt="" loading="lazy" onerror="this.remove()">` : ""}
+        <span class="photo-badge">${coverOf(p) ? "📷" : "ℹ️"} ${slidesOf(p).length}</span>
       </button>
       <div class="card-body">
         <h3>${esc(p.name)}</h3>
@@ -885,23 +913,42 @@ document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click
 $("checkout").addEventListener("click", e => { if (e.target.id === "checkout") closeTop(); });
 
 /* ---- галерея ---- */
-let gImgs = [], gIdx = 0;
+let gSlides = [], gIdx = 0, gProd = null;
 function openGallery(id){
-  const p = byId(id); if (!p || !p.images.length) return;
-  gImgs = p.images; gIdx = 0;
-  gImgs = p.images.map(imgUrl);
+  const p = byId(id); if (!p) return;
+  gProd = p; gSlides = slidesOf(p); gIdx = 0;
   $("gTitle").innerHTML = `${esc(p.name)}<small>${fmt(p.price)} RSD</small>`;
   showSlide(0); openLayer("gallery");
 }
-function showSlide(dir){
-  const img = $("gImg");
-  if (dir){ img.style.opacity = 0; img.style.transform = `translateX(${-dir*30}px)`;
-    setTimeout(() => { img.src = gImgs[gIdx]; img.style.transform = `translateX(${dir*30}px)`;
-      requestAnimationFrame(() => { img.style.opacity = 1; img.style.transform = "none"; }); }, 120); }
-  else { img.src = gImgs[gIdx]; img.style.opacity = 1; img.style.transform = "none"; }
-  $("gDots").innerHTML = gImgs.map((_, i) => `<i class="${i === gIdx ? "on" : ""}"></i>`).join("");
+function infoHTML(p){
+  const k = p.kbju;
+  const hasK = k && [k.kcal, k.p, k.f, k.c].some(v => v !== "" && v != null);
+  return `<h4>${esc(p.name)}</h4>
+    ${p.weight ? `<div class="weight">${esc(p.weight)}</div>` : ""}
+    ${p.desc ? `<p>${esc(p.desc)}</p>` : ""}
+    <div class="lbl">Состав</div>
+    ${p.composition ? `<p>${esc(p.composition)}</p>` : `<p class="soon">Скоро добавим</p>`}
+    <div class="lbl">КБЖУ на 100 г</div>
+    ${hasK ? `<div class="kbju">
+      <div><b>${esc(k.kcal)}</b><span>ккал</span></div><div><b>${esc(k.p)}</b><span>белки</span></div>
+      <div><b>${esc(k.f)}</b><span>жиры</span></div><div><b>${esc(k.c)}</b><span>углеводы</span></div></div>` : `<p class="soon">Скоро добавим</p>`}`;
 }
-const go = d => { gIdx = (gIdx + d + gImgs.length) % gImgs.length; showSlide(d); haptic.soft(); };
+function showSlide(dir){
+  const s = gSlides[gIdx], img = $("gImg"), info = $("gInfo");
+  const apply = () => {
+    if (s.type === "info"){ img.hidden = true; info.hidden = false; info.innerHTML = infoHTML(gProd); info.scrollTop = 0; }
+    else { info.hidden = true; img.hidden = false; img.src = s.src; }
+    $("gCap").textContent = s.type === "info" ? "Описание и состав" : (s.cap || "");
+  };
+  const el = () => s.type === "info" ? info : img;
+  if (dir){
+    [img, info].forEach(x => { x.style.opacity = 0; x.style.transform = `translateX(${-dir*30}px)`; });
+    setTimeout(() => { apply(); el().style.transform = `translateX(${dir*30}px)`;
+      requestAnimationFrame(() => { el().style.opacity = 1; el().style.transform = "none"; }); }, 120);
+  } else { apply(); el().style.opacity = 1; el().style.transform = "none"; }
+  $("gDots").innerHTML = gSlides.map((_, i) => `<i class="${i === gIdx ? "on" : ""}"></i>`).join("");
+}
+const go = d => { gIdx = (gIdx + d + gSlides.length) % gSlides.length; showSlide(d); haptic.soft(); };
 $("gPrev").onclick = () => go(-1); $("gNext").onclick = () => go(1);
 (() => { let x0 = null; const st = $("gStage");
   st.addEventListener("pointerdown", e => { x0 = e.clientX; });
@@ -912,7 +959,7 @@ $("gPrev").onclick = () => go(-1); $("gNext").onclick = () => go(1);
 /* ---- оформление ---- */
 function renderCheckout(){
   $("lines").innerHTML = Object.entries(cart).map(([id, q]) => { const p = byId(id);
-    return `<div class="line"><img src="${p.images[0] ? esc(imgUrl(p.images[0])) : ""}" alt="" onerror="this.style.visibility='hidden'"><div class="nm">${esc(p.name)}<small>${esc(catLabel(p.category))} · ${fmt(p.price)} RSD</small></div>
+    return `<div class="line"><img src="${coverOf(p) ? esc(imgUrl(coverOf(p))) : ""}" alt="" onerror="this.style.visibility='hidden'"><div class="nm">${esc(p.name)}<small>${esc(catLabel(p.category))} · ${fmt(p.price)} RSD</small></div>
       <div class="ctrl" data-ctrl="${id}">${ctrlHTML(id)}</div></div>`; }).join("");
   const g = goodsSum(), f = deliveryFee();
   $("totals").innerHTML = `<div><span>Товары</span><span>${fmt(g)} RSD</span></div>
@@ -922,7 +969,7 @@ function renderCheckout(){
   $("zoneField").style.display = $("f-address").style.display = state.type === "Доставка" ? "" : "none";
   $("pickupField").style.display = state.type === "Самовывоз" ? "" : "none";
 }
-$("cartBar").addEventListener("click", () => { haptic.tap(); renderCheckout(); openLayer("checkout"); });
+$("cartBar").addEventListener("click", () => { haptic.tap(); refreshDayChips(); renderCheckout(); openLayer("checkout"); });
 function bindSeg(id, key){
   $(id).addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return;
     state[key] = b.dataset.val; [...$(id).children].forEach(x => x.classList.toggle("on", x === b)); haptic.soft(); renderCheckout(); });
@@ -939,11 +986,38 @@ function renderZonesAndPickup(){
   const src = `https://www.google.com/maps?q=${q}&z=17&output=embed`;
   if ($("pickupMap").getAttribute("src") !== src) $("pickupMap").setAttribute("src", src);
 }
+// подсказки даты: Сегодня / Завтра / Послезавтра. «Сегодня» — только для заказов до 12:00
+const TODAY_UNTIL = CFG.TODAY_UNTIL_HOUR || 12;
+const todayAllowed = () => new Date().getHours() < TODAY_UNTIL;
+function refreshDayChips(){ const b = document.querySelector('[data-day="0"]'); if (b) b.hidden = !todayAllowed(); }
+refreshDayChips();
+let pickedDay = null;
 document.querySelectorAll("[data-day]").forEach(b => b.addEventListener("click", () => {
   const d = new Date(); d.setDate(d.getDate() + +b.dataset.day);
+  pickedDay = +b.dataset.day;
   $("deliv-date").value = `${b.textContent}, ${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+  document.querySelectorAll("[data-day]").forEach(x => x.classList.toggle("on", x === b));
   haptic.soft(); $("f-date").classList.remove("bad");
+  updateSlots();
 }));
+$("deliv-date").addEventListener("input", () => { pickedDay = null; document.querySelectorAll("[data-day]").forEach(x => x.classList.remove("on")); updateSlots(); });
+
+// подсказки времени; на «сегодня» прошедшие слоты недоступны
+function updateSlots(){
+  const h = new Date().getHours();
+  document.querySelectorAll("[data-slot]").forEach(b => {
+    const start = parseInt(b.dataset.slot, 10);
+    b.disabled = pickedDay === 0 && h >= start;
+    if (b.disabled && b.classList.contains("on")){ b.classList.remove("on"); $("deliv-time").value = ""; }
+  });
+}
+document.querySelectorAll("[data-slot]").forEach(b => b.addEventListener("click", () => {
+  if (b.disabled) return;
+  $("deliv-time").value = b.dataset.slot;
+  document.querySelectorAll("[data-slot]").forEach(x => x.classList.toggle("on", x === b));
+  haptic.soft();
+}));
+$("deliv-time").addEventListener("input", () => document.querySelectorAll("[data-slot]").forEach(x => x.classList.toggle("on", x.dataset.slot === $("deliv-time").value)));
 document.querySelectorAll(".field input").forEach(i => i.addEventListener("input", () => i.closest(".field").classList.remove("bad")));
 
 // ник и имя подставляем из Telegram, если есть
@@ -985,11 +1059,19 @@ $("confirmBtn").addEventListener("click", async () => {
   const bad = need.filter(f => !$(f).querySelector("input").value.trim());
   need.forEach(f => $(f).classList.toggle("bad", bad.includes(f)));
   if (bad.length){ haptic.err(); $(bad[0]).querySelector("input").focus(); return; }
+  if (!todayAllowed()){
+    const dv = $("deliv-date").value.toLowerCase(), t = new Date();
+    const todayStr = `${String(t.getDate()).padStart(2,"0")}.${String(t.getMonth()+1).padStart(2,"0")}`;
+    if (!dv || (dv.includes("сегодня") && !dv.includes("послез")) || dv.includes(todayStr)){
+      $("f-date").classList.add("bad"); haptic.err();
+      toast(`На сегодня принимаем заказы до ${TODAY_UNTIL}:00 — выберите завтра или позже`); return;
+    }
+  }
 
   const orderData = {
     delivery_type: state.type,
     delivery_zone: state.type === "Доставка" ? state.zone : "",
-    date: $("deliv-date").value.trim() || "Сегодня",
+    date: $("deliv-date").value.trim() || (todayAllowed() ? "Сегодня" : "Завтра"),
     time: $("deliv-time").value.trim(),
     name: $("client-name").value.trim(),
     tg_username: normNick($("client-nick").value),
@@ -1008,6 +1090,10 @@ $("confirmBtn").addEventListener("click", async () => {
     return;
   }
 
+  // попросить у клиента разрешение, чтобы бот мог написать ему «заказ принят» (если витрину открыли по прямой ссылке)
+  if (inTelegram && tgUser && !tgUser.allows_write_to_pm && tg.requestWriteAccess){
+    await new Promise(res => { try { tg.requestWriteAccess(() => res()); } catch(e){ res(); } });
+  }
   const btn = $("confirmBtn"), label = btn.textContent;
   sending = true; btn.disabled = true; btn.textContent = "Отправляем…";
   try {
@@ -1032,7 +1118,7 @@ $("confirmBtn").addEventListener("click", async () => {
 function applyCatalog(data){
   if (!data || !Array.isArray(data.products) || !data.products.length) return false;
   const byName = {}; Object.entries(cart).forEach(([id, q]) => { const p = byId(id); if (p) byName[p.name] = q; });
-  products = data.products.map(p => withCook({ ...p, images: Array.isArray(p.images) ? p.images : [], desc: p.desc || "", weight: p.weight || "" }));
+  products = data.products.map(p => withCook({ ...p, images: Array.isArray(p.images) ? p.images : [], ready: Array.isArray(p.ready) ? p.ready : [], desc: p.desc || "", weight: p.weight || "" }));
   if (Array.isArray(data.zones) && data.zones.length) ZONES = data.zones;
   if (data.pickup) PICKUP = Object.assign({}, PICKUP, data.pickup);
   // корзина переживает обновление каталога (сопоставляем по названию)
